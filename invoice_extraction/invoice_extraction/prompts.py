@@ -337,7 +337,7 @@ class InvoicePrompts:
         return (
             "Analyze this invoice and classify it as one of: hotel, travel, food, or other.\n\n"
             f"{InvoicePrompts.get_language_instruction()}"
-            f"{InvoicePrompts.get_formatting_rules()}\n"
+            # f"{InvoicePrompts.get_formatting_rules()}\n"
             "CLASSIFICATION RULES:\n"
             "- Food > Hotel > Travel > Other (based on presence)\n"
             "- Hotel: Room charges, accommodation fees\n"
@@ -346,6 +346,7 @@ class InvoicePrompts:
             "- Other: All other types\n\n"
             "Return only one of: hotel, travel, food, or other."
         )
+    
     @staticmethod
     def get_hotel_prompt():
         return (
@@ -355,15 +356,40 @@ class InvoicePrompts:
             f"{InvoicePrompts.get_currency_rules()}"
             f"{InvoicePrompts.get_formatting_rules()}"
             f"{InvoicePrompts.get_shared_extraction_rules()}\n"
-            "HOTEL RULES:\n"
-            "- Use ONLY the Tax Summary section for total CGST/SGST values\n"
-            "- DO NOT calculate or infer taxes for each service\n"
-            "- In `hotel_service_breakage`, DO NOT include cgst_amount or sgst_amount unless line-item taxes are explicitly written in the invoice next to the service item\n"
-            "- Extract services (Room Tariff, Dining, etc.) with amount and SAC code only\n"
-            "- Add `type` to each item: accommodation, food, laundry, etc.\n"
 
+            "HOTEL SERVICE BREAKAGE INSTRUCTIONS:\n"
+            "- Extract **each individual service line-item** from the 'Voucher / Service Breakage' table **exactly as-is**.\n"
+            "- Maintain the **exact same order** of line-items as they appear in the invoice voucher section.\n"
+            "- **Do not merge, group, or summarize** repeated line-items.\n"
+            "- Extract line-items with 100% accuracy in sequence, even if:\n"
+            "  * Date, description, SAC code, or amounts are repeated across lines\n"
+            "  * Line-items appear visually split across multiple rows\n"
+            "- The output field is called `hotel_service_breakage`, which should be an **array of structured service items**, each containing:\n"
+            "  * date\n"
+            "  * description\n"
+            "  * bill_type (accommodation, food, laundry, etc.)\n"
+            "  * amount\n"
+            "  * SAC_code\n"
+            "  * sgst_amount\n"
+            "  * cgst_amount\n"
+            "- **Strictly exclude** the following from `hotel_service_breakage`:\n"
+            "  * Tax lines (State GST, Central GST)\n"
+            "  * Summary lines (Day Total, Grand Total, Round Off)\n"
+            "  * Payment lines (Advance, Settlement Details)\n"
+            "- If SGST/CGST amounts are not explicitly mentioned in line-items, compute based on SAC codes:\n"
+            "  * SAC 996311 → SGST 6%, CGST 6%\n"
+            "  * SAC 996331 or 996332 → SGST 9%, CGST 9%\n"
+            "- Ensure the **sum of extracted SGST and CGST across all service items matches the invoice's Tax Summary.**\n"
+            "- **Never skip, reorder, or deduplicate** any voucher/service line-item under any condition.\n"
+
+            "CRITICAL REMINDER:\n"
+            "- **The correctness of hotel_service_breakage extraction is top priority.**\n"
+            "- No heuristic, simplification, or assumption is allowed when handling line-items. Extract with literal accuracy.\n"
+            "- **Do NOT round off or alter decimal places of any amount figures in any extracted field.**\n\n"
             f"{InvoicePrompts.get_translation_examples()}"
         )
+
+
     
     @staticmethod
     def get_travel_prompt():

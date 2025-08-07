@@ -3,83 +3,89 @@ from pydantic import BaseModel, Field
 from typing import List, Union
 
 class LineItemEntry(BaseModel):
-    date: str
+    item_date: str
     description: str
-    type: str
+    bill_type: str
     amount: str
-    SAC_code: str
+    sac_code: str
     sgst_amount: str
     cgst_amount: str
 
 class LiquorItems(BaseModel):
-    liquor_name: str
-    liquor_amount: str
+    description: str
+    amount: str
 
 class DataFieldsFood(BaseModel):
     merchant_name: str
     invoice_no: str
-    total_amount: str
+    total_amount_base: str
     currency_code: str
     invoice_date: str
     sgst_amount: str
     cgst_amount: str
     # converted_amount_inr:float
     # exchange_rate_used:float
-    liquor_details: List[LiquorItems] = Field(
+    liquor_items: List[LiquorItems] = Field(
         description="List of liquor items with their names and amounts if liquor is present otherwise return empty list"
     )
 class DataFieldsOthers(BaseModel):
     merchant_name: str
     invoice_no: str
-    total_amount: str
+    total_amount_base: str
     currency_code: str
     invoice_date: str
     sgst_amount: str
     cgst_amount: str
-    company_name: str
-    gst_no: str
+    # company_name: str
+    # gst_no: str
     state: str
     city: str
-    pin: str
+    pincode: str
+    liquor_items: List[LiquorItems] = Field(
+        description="List of liquor items with their names and amounts if liquor is present otherwise return empty  list"
+    )
     # converted_amount_inr:float
     # exchange_rate_used:float
 
 class DataFieldsTravel(BaseModel):
     merchant_name: str
     invoice_no: str
-    total_amount: str
+    total_amount_base: str
     currency_code: str
     invoice_date: str
     sgst_amount: str
     cgst_amount: str
     mode_of_travel: str
-    travel_ticket_class: str
+    travel_class: str
     from_location: str
     to_location: str
     departure_date: str
     departure_time: str
     arrival_date: str
     arrival_time: str
-    no_of_km: str
-    intra_or_inter_city_travel: str
+    distance: str
+    intra_inter_city: str
+    liquor_items:List[LiquorItems] = Field(
+        description="List of liquor items with their names and amounts if liquor is present otherwise return empty list"
+    )
 
 class DataFieldsHotel(BaseModel):
     merchant_name: str
     invoice_no: str
-    total_amount: str
+    total_amount_base: str
     currency_code: str
     invoice_date: str
     sgst_amount: str
     cgst_amount: str
-    company_name: str
-    gst_no: str
+    guest_company_name: str
+    guest_company_gst_no: str
     guest_name: str
-    checkin_date: str
-    checkout_date: str
+    check_in_date: str
+    check_out_date: str
     total_days_stayed: str
-    hotel_state: str
-    hotel_city: str
-    hotel_pin: str
+    state: str
+    city: str
+    pincode: str
     # converted_amount_inr:float
     # exchange_rate_used:float
     hotel_service_breakage: List[LineItemEntry] = Field(

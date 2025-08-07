@@ -96,6 +96,51 @@ class AsyncImageProcessor:
         output_tokens = (len(detected_type) + len(str(result_dict))) / 4
         return (input_tokens / 1000 * 0.005, output_tokens / 1000 * 0.015)
 
+    # async def process_single_image(self, image_file, type_prompt, get_prompt_by_type_func):
+    #     try:
+    #         image_file.seek(0)
+    #         image_bytes = image_file.read()
+    #         if not image_bytes:
+    #             raise ValueError("Empty image")
+
+    #         image_bytes, width, height = self.resize_image_if_needed(image_bytes)
+    #         base64_image = self.encode_image_to_base64(image_bytes)
+    #         image_cost = self.calculate_image_cost(width, height)
+
+    #         detected_type = await self.detect_invoice_type(base64_image, type_prompt)
+    #         data_prompt = get_prompt_by_type_func(detected_type)
+
+    #         result = await self.extract_invoice_data(base64_image, data_prompt)
+    #         result_dict = result.model_dump()
+    #         invoice_data = result.data
+
+    #         if detected_type == "hotel":
+    #             filtered = self.filter_hotel_services(result_dict["data"]["hotel_service_breakage"])
+    #             result_dict["data"]["hotel_service_breakage"] = filtered
+
+    #         input_cost, output_cost = self.calculate_token_costs(type_prompt, data_prompt, detected_type, result_dict)
+
+    #         total_cost_usd = round((image_cost * 2) + input_cost + output_cost, 6)
+    #         total_cost_inr = round(total_cost_usd * self.usd_to_inr, 4)
+
+    #         return {
+    #             "filename": image_file.name,
+    #             "invoice_type": detected_type,
+    #             "structured_data": result_dict["data"],
+    #             "estimated_cost_usd": total_cost_usd,
+    #             "estimated_cost_inr": total_cost_inr,
+    #             "breakdown": {
+    #                 "image_cost_usd": round(image_cost * 2, 6),
+    #                 "input_token_cost_usd": round(input_cost, 6),
+    #                 "output_token_cost_usd": round(output_cost, 6),
+    #             }
+    #         }
+
+    #     except Exception as e:
+    #         return {
+    #             "filename": getattr(image_file, "name", "unknown"),
+    #             "error": str(e)
+    #         }
     async def process_single_image(self, image_file, type_prompt, get_prompt_by_type_func):
         try:
             image_file.seek(0)
@@ -107,37 +152,44 @@ class AsyncImageProcessor:
             base64_image = self.encode_image_to_base64(image_bytes)
             image_cost = self.calculate_image_cost(width, height)
 
+
             detected_type = await self.detect_invoice_type(base64_image, type_prompt)
             data_prompt = get_prompt_by_type_func(detected_type)
 
+
             result = await self.extract_invoice_data(base64_image, data_prompt)
+            invoice_data_model = result.data
+            invoice_data = invoice_data_model.model_dump()
+
+            if detected_type == "hotel" and "hotel_service_breakage" in invoice_data:
+                filtered_services = self.filter_hotel_services(invoice_data["hotel_service_breakage"])
+                invoice_data["service_breakage"] = filtered_services
+                invoice_data.pop("hotel_service_breakage", None)
+
+
             result_dict = result.model_dump()
-            invoice_data = result.data
-
-            if detected_type == "hotel":
-                filtered = self.filter_hotel_services(result_dict["data"]["hotel_service_breakage"])
-                result_dict["data"]["hotel_service_breakage"] = filtered
-
             input_cost, output_cost = self.calculate_token_costs(type_prompt, data_prompt, detected_type, result_dict)
 
             total_cost_usd = round((image_cost * 2) + input_cost + output_cost, 6)
             total_cost_inr = round(total_cost_usd * self.usd_to_inr, 4)
 
-            return {
-                "filename": image_file.name,
+            invoice_data.update({
+                "file_name": image_file.name,
                 "invoice_type": detected_type,
-                "structured_data": result_dict["data"],
-                "estimated_cost_usd": total_cost_usd,
-                "estimated_cost_inr": total_cost_inr,
-                "breakdown": {
-                    "image_cost_usd": round(image_cost * 2, 6),
-                    "input_token_cost_usd": round(input_cost, 6),
-                    "output_token_cost_usd": round(output_cost, 6),
-                }
-            }
+                # Uncomment below if cost breakdown is needed
+                # "estimated_cost_usd": total_cost_usd,
+                # "estimated_cost_inr": total_cost_inr,
+                # "image_cost_usd": round(image_cost * 2, 6),
+                # "input_token_cost_usd": round(input_cost, 6),
+                # "output_token_cost_usd": round(output_cost, 6),
+            })
+            print("invoice_data:", invoice_data)
+            return invoice_data 
 
         except Exception as e:
             return {
-                "filename": getattr(image_file, "name", "unknown"),
-                "error": str(e)
+                "file_name": getattr(image_file, "name", "unknown"),
+                "error": str(e),
+                "invoice_type": None,
+                "status": 500
             }

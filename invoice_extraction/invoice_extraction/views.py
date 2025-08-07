@@ -48,6 +48,7 @@ class AnalyzeImageView(APIView):
             for file in image_files
         ]
         return await asyncio.gather(*tasks)
+        
 
     def post(self, request, *args, **kwargs):
         """Handle POST request to analyze invoice images"""
@@ -69,20 +70,13 @@ class AnalyzeImageView(APIView):
             async_results = asyncio.run(
                 self.process_images_async(validated_files, type_detection_prompt)
             )
-            results.extend(async_results)
-        # if validated_files:
-        #     print(f"[INFO] Processing {len(validated_files)} files asynchronously")
 
-        #     loop = asyncio.new_event_loop()
-        #     asyncio.set_event_loop(loop)
+           
+            if len(async_results) == 1:
+                async_results = async_results[0]
 
-        #     try:
-        #         async_results = loop.run_until_complete(
-        #             self.process_images_async(validated_files, type_detection_prompt)
-        #         )
-        #         results.extend(async_results)
-        #     finally:
-        #         loop.close()
 
-        print(f"[DEBUG] Total results: {len(results)}")
-        return Response(results, status=status.HTTP_200_OK)
+        print(f"[DEBUG] Total results: ",async_results)
+        return Response(async_results, status=status.HTTP_200_OK)
+
+
