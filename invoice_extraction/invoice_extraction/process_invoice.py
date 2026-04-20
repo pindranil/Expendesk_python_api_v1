@@ -1,20 +1,17 @@
-
 import io
 import os
 import base64
 import asyncio
 from PIL import Image
-from datetime import datetime
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from invoice_extraction.invoice_parser_v1 import InvoiceResponse
-from invoice_extraction.conversion import fetch_conversion_rate
+import tiktoken
+from invoice_extraction.invoice_parser import InvoiceResponse
 
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_SECRET_KEY")
 if not openai_api_key:
     raise EnvironmentError("Missing OPENAI_SECRET_KEY in .env")
-
 
 USD_TO_INR = 83.0
 
@@ -25,7 +22,15 @@ class AsyncImageProcessor:
     def __init__(self):
         self.client = client
         self.usd_to_inr = USD_TO_INR
+        # gpt-5-mini pricing
+        self.pricing = {
+            "image_input": 0.00025,             # < 720x720
+            "large_image_input": 0.001,         # >= 720x720
+            "input_token": 0.75 / 1_000_000,    # ✅ $0.75/MTok
+            "output_token": 4.50 / 1_000_000,
+        }
 
+    # ----------------- Image Utils -----------------
     def resize_image_if_needed(self, image_bytes, max_dimension=1024):
         image = Image.open(io.BytesIO(image_bytes))
         if image.mode != "RGB":
@@ -43,148 +48,117 @@ class AsyncImageProcessor:
             width, height = new_width, new_height
 
         img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG', quality=75, optimize=True)
+        image.save(img_byte_arr, format="JPEG", quality=75, optimize=True)
         return img_byte_arr.getvalue(), width, height
 
     def encode_image_to_base64(self, image_bytes):
         return base64.b64encode(image_bytes).decode("utf-8")
 
     def calculate_image_cost(self, width, height):
-        return 0.00025 if width < 720 and height < 720 else 0.001
+        return self.pricing["image_input"] if (width < 720 and height < 720) else self.pricing["large_image_input"]
 
-    async def detect_invoice_type(self, base64_image, type_prompt):
-        response = await self.client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": type_prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                ]
-            }],
-            max_tokens=50,
-            temperature=0.0,
-        )
-        return response.choices[0].message.content.strip().lower()
+    # ----------------- Token Utils -----------------
+    def count_tokens(self, text: str):
+        try:
+            enc = tiktoken.encoding_for_model("gpt-5-mini")
+        except KeyError:
+            enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text))
 
-    async def extract_invoice_data(self, base64_image, specific_prompt):
+    def calculate_token_costs(self, prompt, result_dict):
+        input_tokens = self.count_tokens(prompt)
+        output_tokens = self.count_tokens(str(result_dict))
+
+        input_cost = input_tokens * self.pricing["input_token"]
+        output_cost = output_tokens * self.pricing["output_token"]
+
+        return input_cost, output_cost, input_tokens, output_tokens
+
+    # ----------------- AI Call (single) -----------------
+    async def extract_invoice(self, base64_image, combined_prompt):
+        """Single API call — classify + extract in one shot."""
         response = await self.client.beta.chat.completions.parse(
-            model="gpt-4o",
+            model="gpt-5.4-mini",
             messages=[{
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": specific_prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    {"type": "text", "text": combined_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}",
+                            "detail": "high"  # ✅ high detail for OCR accuracy
+                        }
+                    }
                 ]
             }],
             response_format=InvoiceResponse,
-            max_tokens=1500,
-            temperature=0.0,
+            max_completion_tokens=8000,   # ✅ increased — reasoning + output both need space
+            reasoning_effort="low",
         )
-        return response.choices[0].message.parsed
+        return response.choices[0].message.parsed  # ✅ returns InvoiceResponse directly
 
+    # ----------------- Helpers -----------------
     def filter_hotel_services(self, services):
         filtered = []
-        exclude = ['central gst @', 'state gst @', 'sgst @', 'cgst @', 'igst @', 'gst @', 'tax @', 'total tax', 'tax total']
+        exclude = [
+            'central gst @', 'state gst @', 'sgst @', 'cgst @',
+            'igst @', 'gst @', 'tax @', 'total tax', 'tax total'
+        ]
         for service in services:
             if not any(pattern in service.get("description", "").lower() for pattern in exclude):
                 filtered.append(service)
         return filtered
 
-    def calculate_token_costs(self, type_prompt, data_prompt, detected_type, result_dict):
-        input_tokens = (len(type_prompt) + len(data_prompt)) / 4
-        output_tokens = (len(detected_type) + len(str(result_dict))) / 4
-        return (input_tokens / 1000 * 0.005, output_tokens / 1000 * 0.015)
-
-    # async def process_single_image(self, image_file, type_prompt, get_prompt_by_type_func):
-    #     try:
-    #         image_file.seek(0)
-    #         image_bytes = image_file.read()
-    #         if not image_bytes:
-    #             raise ValueError("Empty image")
-
-    #         image_bytes, width, height = self.resize_image_if_needed(image_bytes)
-    #         base64_image = self.encode_image_to_base64(image_bytes)
-    #         image_cost = self.calculate_image_cost(width, height)
-
-    #         detected_type = await self.detect_invoice_type(base64_image, type_prompt)
-    #         data_prompt = get_prompt_by_type_func(detected_type)
-
-    #         result = await self.extract_invoice_data(base64_image, data_prompt)
-    #         result_dict = result.model_dump()
-    #         invoice_data = result.data
-
-    #         if detected_type == "hotel":
-    #             filtered = self.filter_hotel_services(result_dict["data"]["hotel_service_breakage"])
-    #             result_dict["data"]["hotel_service_breakage"] = filtered
-
-    #         input_cost, output_cost = self.calculate_token_costs(type_prompt, data_prompt, detected_type, result_dict)
-
-    #         total_cost_usd = round((image_cost * 2) + input_cost + output_cost, 6)
-    #         total_cost_inr = round(total_cost_usd * self.usd_to_inr, 4)
-
-    #         return {
-    #             "filename": image_file.name,
-    #             "invoice_type": detected_type,
-    #             "structured_data": result_dict["data"],
-    #             "estimated_cost_usd": total_cost_usd,
-    #             "estimated_cost_inr": total_cost_inr,
-    #             "breakdown": {
-    #                 "image_cost_usd": round(image_cost * 2, 6),
-    #                 "input_token_cost_usd": round(input_cost, 6),
-    #                 "output_token_cost_usd": round(output_cost, 6),
-    #             }
-    #         }
-
-    #     except Exception as e:
-    #         return {
-    #             "filename": getattr(image_file, "name", "unknown"),
-    #             "error": str(e)
-    #         }
-    async def process_single_image(self, image_file, type_prompt, get_prompt_by_type_func):
+    # ----------------- Main Process -----------------
+    async def process_single_image(self, image_file, combined_prompt):
         try:
             image_file.seek(0)
             image_bytes = image_file.read()
             if not image_bytes:
                 raise ValueError("Empty image")
 
+            # step 1: preprocess image
             image_bytes, width, height = self.resize_image_if_needed(image_bytes)
             base64_image = self.encode_image_to_base64(image_bytes)
             image_cost = self.calculate_image_cost(width, height)
 
+            # step 2: single API call — classify + extract
+            invoice_data: InvoiceResponse = await self.extract_invoice(base64_image, combined_prompt)
+            detected_type = invoice_data.invoice_type.lower()
+            invoice_dict = invoice_data.model_dump()
 
-            detected_type = await self.detect_invoice_type(base64_image, type_prompt)
-            data_prompt = get_prompt_by_type_func(detected_type)
+            # step 3: clean hotel services
+            if detected_type == "hotel" and invoice_dict.get("hotel_service_breakage"):
+                filtered_services = self.filter_hotel_services(invoice_dict["hotel_service_breakage"])
+                invoice_dict["service_breakage"] = filtered_services
+                invoice_dict.pop("hotel_service_breakage", None)
 
+            # step 3b: remove discriminator `type` field
+            invoice_dict.pop("type", None)
 
-            result = await self.extract_invoice_data(base64_image, data_prompt)
-            invoice_data_model = result.data
-            invoice_data = invoice_data_model.model_dump()
+            # step 4: cost calculation
+            input_cost, output_cost, input_tokens, output_tokens = self.calculate_token_costs(
+                combined_prompt, invoice_dict
+            )
 
-            if detected_type == "hotel" and "hotel_service_breakage" in invoice_data:
-                filtered_services = self.filter_hotel_services(invoice_data["hotel_service_breakage"])
-                invoice_data["service_breakage"] = filtered_services
-                invoice_data.pop("hotel_service_breakage", None)
-
-
-            result_dict = result.model_dump()
-            input_cost, output_cost = self.calculate_token_costs(type_prompt, data_prompt, detected_type, result_dict)
-
-            total_cost_usd = round((image_cost * 2) + input_cost + output_cost, 6)
+            total_cost_usd = round(image_cost + input_cost + output_cost, 6)
             total_cost_inr = round(total_cost_usd * self.usd_to_inr, 4)
 
-            invoice_data.update({
+            # step 5: return response
+            invoice_dict.update({
                 "file_name": image_file.name,
                 "invoice_type": detected_type,
-                # Uncomment below if cost breakdown is needed
-                # "estimated_cost_usd": total_cost_usd,
-                # "estimated_cost_inr": total_cost_inr,
-                # "image_cost_usd": round(image_cost * 2, 6),
-                # "input_token_cost_usd": round(input_cost, 6),
-                # "output_token_cost_usd": round(output_cost, 6),
+                "estimated_cost_usd": total_cost_usd,
+                "estimated_cost_inr": total_cost_inr,
+                "image_cost_usd": round(image_cost, 6),
+                "input_token_cost_usd": round(input_cost, 6),
+                "output_token_cost_usd": round(output_cost, 6),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
             })
-            print("invoice_data:", invoice_data)
-            return invoice_data 
+            print("invoice_data:", invoice_dict)
+            return invoice_dict
 
         except Exception as e:
             return {
