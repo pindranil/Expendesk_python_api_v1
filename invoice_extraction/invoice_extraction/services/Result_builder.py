@@ -1,5 +1,5 @@
 from invoice_extraction.invoice_parser import InvoiceResponse, LiquorItems, UnauthorizedLineItem
-from invoice_extraction.calculate_cost import calculate_token_costs, calculate_total_cost
+from invoice_extraction.services.calculate_cost import calculate_token_costs, calculate_total_cost
 
 
 # Map field name → Pydantic model class
@@ -82,13 +82,13 @@ def build_result_dict(
     invoice_dict.update({
         "file_name":    image_file_name,
         "invoice_type": detected_type,
-        # "estimated_cost_usd":   total_cost_usd,
-        # "estimated_cost_inr":   total_cost_inr,
-        # "image_cost_usd":       round(total_image_cost, 6),
-        # "input_token_cost_usd": round(input_cost, 6),
-        # "output_token_cost_usd":round(output_cost, 6),
-        # "input_tokens":         input_tokens,
-        # "output_tokens":        output_tokens,
+        "estimated_cost_usd":   total_cost_usd,
+        "estimated_cost_inr":   total_cost_inr,
+        "image_cost_usd":       round(total_image_cost, 6),
+        "input_token_cost_usd": round(input_cost, 6),
+        "output_token_cost_usd":round(output_cost, 6),
+        "input_tokens":         input_tokens,
+        "output_tokens":        output_tokens,
     })
 
     print("invoice_data:", invoice_dict)

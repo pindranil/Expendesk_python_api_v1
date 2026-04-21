@@ -3,10 +3,10 @@ import asyncio
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-from invoice_extraction.Image_utils    import resize_image_if_needed, encode_image_to_base64, build_image_content_blocks
-from invoice_extraction.calculate_cost import calculate_image_cost, PRICING
-from invoice_extraction.Ai_calls       import extract_invoice_single, extract_invoice_pdf, detect_unauthorized_items
-from invoice_extraction.Result_builder import merge_unauthorized_results, build_result_dict
+from invoice_extraction.services.Image_utils    import resize_image_if_needed, encode_image_to_base64, build_image_content_blocks
+from invoice_extraction.services.calculate_cost import calculate_image_cost, PRICING
+from invoice_extraction.services.Ai_calls       import extract_invoice_single, extract_invoice_pdf, detect_unauthorized_items
+from invoice_extraction.services.Result_builder import merge_unauthorized_results, build_result_dict
 
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_SECRET_KEY")

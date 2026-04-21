@@ -4,5 +4,5 @@ from .views import AnalyzeImageView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('analyze-image/', AnalyzeImageView.as_view(), name='analyze-image'),  # ✅ CORRECT
+    path('analyze-image/', AnalyzeImageView.as_view(), name='analyze-image'),
 ]
