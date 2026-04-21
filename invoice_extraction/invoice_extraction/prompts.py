@@ -38,7 +38,10 @@ class InvoicePrompts:
             "2. Read tax values exactly as shown. DO NOT infer or calculate CGST/SGST based on percentages "
             "or taxable value. Always prefer Tax Summary table values.\n"
             "3. Use Tax Summary sections for sgst_amount and cgst_amount fields\n"
-            "4. If a field is not present in the invoice, return an empty string\n"
+            "4. NULL IS STRICTLY FORBIDDEN: Every field must always have a value.\n"
+            "   - If a field is not present in the invoice, return an empty string \"\"\n"
+            "   - NEVER return null, None, or omit any key — always use empty string \"\" for missing values\n"
+            "   - This rule applies to EVERY field including all fields inside service_breakage line items\n"
             "5. GST NUMBER EXTRACTION (CRITICAL):\n"
             "   - GST numbers are ALWAYS exactly 15 characters. Count them: if your result is not "
             "exactly 15 characters, you have made an error — go back and re-read.\n"
@@ -162,7 +165,7 @@ class InvoicePrompts:
             # ── Hotel block ────────────────────────────────────────
             + (
                 "IF HOTEL / ACCOMMODATION INVOICE:\n"
-                "Extract: merchant_name, invoice_no, total_amount,  invoice_date,\n"
+                "Extract: merchant_name, invoice_no, total_amount, invoice_date,\n"
                 "         sgst_amount, cgst_amount, guest_company_name, guest_company_gst_no,\n"
                 "         vendor_company_gst_no, guest_name,\n"
                 "         check_in_date, check_out_date, total_days_stayed, state, city, pincode\n\n"
@@ -171,18 +174,20 @@ class InvoicePrompts:
                 "- Extract each individual service line-item from the 'Voucher / Service Breakage' table exactly as-is\n"
                 "- Maintain exact order as they appear — do NOT merge, group, or summarize\n"
                 "- Extract even if date, description, SAC code, or amounts repeat across lines\n"
-                "- Each item must contain:\n"
-                "    * item_date — MUST be in YYYY-MM-DD format\n"
-                "    * description\n"
-                "    * bill_type (accommodation / food / laundry / spa / transport / others)\n"
-                "    * amount\n"
-                "    * sac_code\n"
-                "    * sgst_amount\n"
-                "    * cgst_amount\n"
+                "- Each line item is a JSON object with EXACTLY these 7 fields — ALL are required, NONE may be null:\n"
+                "    * item_date    — YYYY-MM-DD format. If not printed on this line, inherit from the nearest date above it\n"
+                "    * description  — service name as printed. If blank, use the bill_type as description\n"
+                "    * bill_type    — one of: accommodation / food / laundry / spa / transport / others\n"
+                "    * amount       — numeric string. If not shown, use \"0.00\"\n"
+                "    * sac_code     — as printed. If not shown, infer from bill_type: accommodation→996311, food/laundry/spa→996331\n"
+                "    * sgst_amount  — numeric string. If not printed per line, compute from SAC code (see below)\n"
+                "    * cgst_amount  — numeric string. If not printed per line, compute from SAC code (see below)\n"
+                "- REMINDER: returning null for ANY of the above 7 fields is an error. Use \"\" only if a value truly "
+                "cannot be determined even after applying the fallback rules above\n"
                 "- EXCLUDE standalone tax lines: 'State GST', 'Central GST', 'SGST', 'CGST', 'IGST'\n"
                 "- EXCLUDE summary lines: 'Day Total', 'Grand Total', 'Round Off'\n"
                 "- EXCLUDE payment lines: 'Advance', 'Settlement Details'\n"
-                "- If sgst_amount/cgst_amount not shown per line, compute from SAC code:\n"
+                "- SAC code tax computation rules:\n"
                 "    * SAC 996311 → SGST 6%, CGST 6%\n"
                 "    * SAC 996331 or 996332 → SGST 9%, CGST 9%\n"
                 "- Sum of SGST and CGST across all items must match the invoice Tax Summary\n"
@@ -194,7 +199,7 @@ class InvoicePrompts:
             # ── Travel block ───────────────────────────────────────
             + (
                 "IF TRAVEL / CONVEYANCE INVOICE:\n"
-                "Extract: merchant_name, invoice_no, total_amount,  invoice_date,\n"
+                "Extract: merchant_name, invoice_no, total_amount, invoice_date,\n"
                 "         sgst_amount, cgst_amount\n"
                 "         mode_of_travel (flight/train/cab)\n"
                 "         travel_class (Economy/Business/Sleeper/AC etc.)\n"
@@ -208,7 +213,7 @@ class InvoicePrompts:
             # ── Food block ─────────────────────────────────────────
             + (
                 "IF FOOD INVOICE:\n"
-                "Extract: merchant_name, invoice_no, total_amount,  invoice_date,\n"
+                "Extract: merchant_name, invoice_no, total_amount, invoice_date,\n"
                 "         sgst_amount, cgst_amount\n\n"
                 if has_food else ""
             )
@@ -227,7 +232,7 @@ class InvoicePrompts:
             # ── Others block (always present as fallback) ──────────
             + (
                 "FOR ALL OTHER INVOICE TYPES:\n"
-                "Extract: merchant_name, invoice_no, total_amount,  invoice_date,\n"
+                "Extract: merchant_name, invoice_no, total_amount, invoice_date,\n"
                 "         sgst_amount, cgst_amount\n"
                 "         state, city, pincode (of merchant if shown, else empty string)\n\n"
             )
