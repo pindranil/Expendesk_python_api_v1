@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-tvtibclj31g*x7n@3j)3en+*r396tn2=!s0vng&d!0!kpy-5d$
 DEBUG = True
 
 ALLOWED_HOSTS = ['192.168.1.101']
-
+# ASGI_APPLICATION = "invoice_extraction.asgi.application"
 
 # Application definition
 
