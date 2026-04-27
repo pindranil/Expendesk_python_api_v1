@@ -59,6 +59,14 @@ class InvoicePrompts:
             "   - vendor_company_gst_no = GST number of the HOTEL or MERCHANT "
             "(labeled: GSTN, GSTIN, Hotel GSTIN, Our GSTIN — usually printed at top of invoice)\n"
             "   - These are TWO DIFFERENT numbers — never swap or copy one into the other\n"
+            "6. MERCHANT NAME EXTRACTION (CRITICAL):\n"
+            "   - Always extract the ACTUAL BUSINESS NAME (e.g. restaurant, hotel, fuel station, shop)\n"
+            "   - NEVER use the payment processor or bank name as the merchant name\n"
+            "   - Ignore and skip: Axis Bank, HDFC Bank, ICICI Bank, SBI, Paytm, Pine Labs, "
+            "Worldline, Razorpay, PhonePe, BharatPe, Mswipe, PayU, or any POS/payment gateway name\n"
+            "   - The real merchant name is usually printed at the TOP of the slip before the bank/POS details\n"
+            "   - Example: A slip showing 'AXIS BANK' then 'LAKSHMI SERVICE STATION' → "
+            "merchant_name = 'Lakshmi Service Station'\n"
         )
 
     @staticmethod
@@ -92,9 +100,10 @@ class InvoicePrompts:
                 "- Hotel: Room charges, accommodation fees\n"
                 "- Food: Restaurant bills, in-room dining, bar, alcohol\n"
                 "- Travel: Cab/train/flight tickets\n"
+                "- Fuel: Petrol, diesel, CNG, LPG, fuel station, service station\n"
                 "- Others: All other types\n"
-                "- Priority order if mixed: Food > Hotel > Travel > Others\n\n"
-                "Set `invoice_type` to one of: hotel, travel, food, others.\n\n"
+                "- Priority order if mixed: Food > Hotel > Travel > Fuel > Others\n\n"
+                "Set `invoice_type` to one of: hotel, travel, food, fuel, others.\n\n"
             )
 
         # Build a numbered list of all types for the AI
@@ -109,6 +118,8 @@ class InvoicePrompts:
             "- Hotel / Accommodation: room charges, room tariff, stay, check-in, check-out\n"
             "- Food: restaurant bill, dining, café, bar, meal, snack, beverage (non-hotel)\n"
             "- Travel / Conveyance: cab, taxi, auto, bus, train ticket, flight, boarding pass, Ola, Uber\n"
+            "- Fuel: petrol, diesel, CNG, LPG, fuel, service station, petrol pump, filling station, "
+            "fuel station, litres, liters, per litre, pump, petroleum\n"
             "- Stationery: paper, pen, office supplies, printing material\n"
             "- Parking: parking fee, parking charge\n"
             "- Printing/Photocopying: print, photocopy, xerox\n"
@@ -126,9 +137,9 @@ class InvoicePrompts:
             f"{keyword_hints}\n"
             "RULES:\n"
             "- Set `invoice_type` to the EXACT `expense_type` string from the list above "
-            "(preserve original casing exactly as shown, e.g. 'Hotel', 'Food', 'Travel').\n"
+            "(preserve original casing exactly as shown, e.g. 'Hotel', 'Food', 'Travel', 'Fuel').\n"
             "- If the invoice clearly matches multiple types, use this priority: "
-            "Food > Hotel > Travel > Conveyance > Others > Miscellaneous.\n"
+            "Food > Hotel > Travel > Fuel > Conveyance > Others > Miscellaneous.\n"
             "- Never invent a type not in the list. If unsure, pick the closest match or "
             "the 'Miscellaneous' / 'Other' entry.\n\n"
         )
@@ -150,6 +161,7 @@ class InvoicePrompts:
         has_hotel    = any(t in type_names_lower for t in ("hotel", "accommodation"))
         has_travel   = any(t in type_names_lower for t in ("travel", "conveyance"))
         has_food     = "food" in type_names_lower
+        has_fuel     = "fuel" in type_names_lower
 
         return (
             "You are an invoice data extraction specialist.\n"
@@ -218,11 +230,23 @@ class InvoicePrompts:
                 if has_food else ""
             )
 
+            # ── Fuel block ─────────────────────────────────────────
+            + (
+                "IF FUEL INVOICE:\n"
+                "A fuel invoice is any bill from a petrol pump, filling station, or service station "
+                "for petrol, diesel, CNG, or LPG.\n"
+                "Extract: merchant_name, invoice_no, total_amount, invoice_date,\n"
+                "         sgst_amount, cgst_amount,\n"
+                "         state, city, pincode (of the fuel station if shown, else empty string)\n\n"
+                if has_fuel else ""
+            )
+
             # ── Total amount rule (always) ─────────────────────────
             + (
                 "TOTAL AMOUNT EXTRACTION RULE (VERY IMPORTANT):\n"
                 "- ALWAYS extract the FINAL PAYABLE AMOUNT\n"
                 "- Prefer labels: 'Grand Total', 'Total Amount', 'Amount Payable', 'Net Total'\n"
+                "- On POS / card payment slips, use the 'AMT' field as the total_amount\n"
                 "- INCLUDE all taxes and rounding\n"
                 "- DO NOT extract 'Sub Total', 'Item Total', or pre-tax amounts\n"
                 "- If multiple totals exist, ALWAYS choose the LAST and FINAL amount printed on the bill\n"
