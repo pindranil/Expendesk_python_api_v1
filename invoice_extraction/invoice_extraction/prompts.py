@@ -211,7 +211,7 @@ class InvoicePrompts:
             # ── Travel block ───────────────────────────────────────
             + (
                 "IF TRAVEL / CONVEYANCE INVOICE:\n"
-                "Extract: merchant_name, invoice_no, total_amount, invoice_date,\n"
+                "Extract: merchant_name, invoice_no,city, total_amount, invoice_date,\n"
                 "         sgst_amount, cgst_amount\n"
                 "         mode_of_travel (flight/train/cab)\n"
                 "         travel_class (Economy/Business/Sleeper/AC etc.)\n"
@@ -225,7 +225,7 @@ class InvoicePrompts:
             # ── Food block ─────────────────────────────────────────
             + (
                 "IF FOOD INVOICE:\n"
-                "Extract: merchant_name, invoice_no, total_amount, invoice_date,\n"
+                "Extract: merchant_name, invoice_no,city, total_amount, invoice_date,\n"
                 "         sgst_amount, cgst_amount\n\n"
                 if has_food else ""
             )
